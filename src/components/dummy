@@ -1,0 +1,59 @@
+// Socket.IO Handlers
+io.on('connection', (socket) => {
+  debug('User connected:', socket.id);
+
+  socket.on('join_chat', (chatId) => {
+    if (!chatId) {
+      debug('Invalid chat ID received');
+      return;
+    }
+    socket.join(chatId);
+    debug(`User ${socket.id} joined chat: ${chatId}`);
+  });
+
+  socket.on('send_message', async (data) => {
+    const { chatId, message: msgContent, senderId } = data;
+
+    if (!chatId || !msgContent || !senderId) {
+      debug('Invalid message data received');
+      return;
+    }
+
+    try {
+      const chat = await Chat.findById(chatId);
+      if (!chat) {
+        debug('Chat not found:', chatId);
+        return;
+      }
+
+      const newMessage = new Message({ chatId, sender: senderId, content: msgContent });
+      await newMessage.save();
+
+      io.to(chatId).emit('receive_message', {
+        sender: senderId,
+        content: msgContent,
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      debug('Error saving message:', error.message);
+      socket.emit('error', { message: 'Error sending message' });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    debug('User disconnected:', socket.id);
+  });
+});
+
+
+const io = socketIO(server, {
+  cors: {
+    origin: ["http://localhost:3000", "http://localhost:3001"],
+    methods: ["GET", "POST"],
+    credentials: true,
+  }
+});
+
+
+// frontend socket
+socketRef.current = io("http://localhost:5000"); 
